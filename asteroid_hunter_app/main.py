@@ -36,6 +36,7 @@ feedApi = 'https://api.nasa.gov/neo/rest/v1/feed?'
 # Function Definitions 
 
 '''
+# *** Optional function: can be in-lieu of manual search of certain fields ***
 # Extract JSON data to get specific fields (Recursive Fetch)
 # Credit for code structure inspiration and concept: Todd Birchard (Hackers and Slackers)
 # Source: https://hackersandslackers.com/extract-data-from-complex-json-python/
