@@ -143,9 +143,6 @@ def asteroid_closest_approach():
         print(exc_type, fname, exc_tb.tb_lineno)
 
 # Get top 10 nearest misses to Earth (past and future)
-# *** Note on this algorithm: ***
-# -Storing algorithm in ascending distance not accurate, 
-# propose sort() function (O(nlong(n) operation))
 def nearest_misses():
     try:
         # Start default value where any added value will be new closest
