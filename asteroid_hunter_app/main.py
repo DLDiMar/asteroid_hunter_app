@@ -2,73 +2,49 @@
 Asteroid Hunter API Pipeline
 Author: Dominic DiMarco
 main.py
-Rev. 1.1
+Rev. 1.2
 Input: NASA API 
 Output: .json files as per below function calls:
     asteroid_closest_approach() -> closest_neo.json
     month_closest_approaches() -> closest_neo_per_month.json
         Currently outputs element_count to console and variable: element_count
     nearest_misses() -> ten_closest_neo.json
+
 *** Proposed Modifications on future revisions ***
 -Change month_closest_approaches() to month_closest_approaches(topQty, year, month)
--Modify month_closest_approaches() to correctly output list of JSON objects per month of top 10
 -Modify nearest_misses() algorithm to nearest_misses(topQty)
 
 *** Revised Modifications on Rev 1.1 ***
 -Modified nearest_misses() algorithm to both ignore repeat asteroid inserts and account for in-between values in array
-'''
 
+*** Revised Modifications on Rev 1.2 ***
+-Modify month_closest_approaches() to correctly output list of JSON objects per month of top 10
+'''
 
 import math, requests, json, os, sys
 import pprint as pretty_print
 from month_information import monthInfo
 from requests.exceptions import HTTPError
+from datetime import datetime, timedelta
 from apikey import userApiKey
 from collections import deque
 
 # Parameters
-
 topMonthCount = 10  # Count for top (qty) of asteroids in month
 topCount = 10       # Top nearest misses value
 monthToTest = 1     # Test integer representation of month (i.e. 1 = January)
 yearToTest = 2021   # Test integer representation of year
 daysPerQuery = 7    # Max return on Feed API
-
 browseApi = 'https://api.nasa.gov/neo/rest/v1/neo/browse?'
 feedApi = 'https://api.nasa.gov/neo/rest/v1/feed?'
 
 # Function Definitions 
 
-'''
-# *** Optional function: can be in-lieu of manual search of certain fields ***
-# Extract JSON data to get specific fields (Recursive Fetch)
-# Credit for code structure inspiration and concept: Todd Birchard (Hackers and Slackers)
-# Source: https://hackersandslackers.com/extract-data-from-complex-json-python/
-def json_extract(jsonObject, key):
-    tempArray = []
-    
-    # Recursive function to reach inside nested JSON objects
-    def extract(jsonObject, tempArray, key):
-        # Check if object is dictionary, then parse through each key-value pair
-        if isinstance(jsonObject, dict):
-            for k, val in jsonObject.items():
-                # Check again for type of object (dictionary or list), continue extraction
-                if isinstance(val, (dict, list)):
-                    extract(val, tempArray, key)
-                # If value is searched key, add to temporary array
-                elif k == key:
-                    tempArray.append(val)
-
-        # Check if object is list, then extract into list and continue extraction
-        elif isinstance(jsonObject, list):
-            for item in jsonObject:
-                extract(item, tempArray, key)
-        return tempArray
-
-    jsonValues = extract(jsonObject, tempArray, key)
-    return jsonValues
-'''
-
+def errorBlock(err):
+    print(f'Other error occured: {err}')
+    exc_type, exc_obj, exc_tb = sys.exc_info()
+    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+    print(exc_type, fname, exc_tb.tb_lineno)
 
 # Get all asteroids and closest approach to Earth
 def asteroid_closest_approach():
@@ -106,7 +82,7 @@ def asteroid_closest_approach():
                 close_approach_data = neo["close_approach_data"]
                 
                 # Iterate through each NEO's close approach data
-                for closeCount, closeObjects in enumerate(close_approach_data):  
+                for closeObjects in close_approach_data:  
                     # Filtering parameters       
                     orbiting_body = closeObjects["orbiting_body"]
                     approachAstroFloat = float(closeObjects["miss_distance"]["astronomical"])
@@ -118,7 +94,6 @@ def asteroid_closest_approach():
                         pageApiClosest = pageApi
                         closestNeo["close_approach_data"] = closeObjects
 
-            
             #Output Verification Block: page, closest distance, index of closest approach
             print('-------')
             print(f'Current page: {pageApi}')
@@ -137,20 +112,15 @@ def asteroid_closest_approach():
         print(f'HTTP error occured: {http_err}')
     # General error handler
     except Exception as err:
-        print(f'Other error occured: {err}')
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        print(exc_type, fname, exc_tb.tb_lineno)
+        errorBlock(err)
 
 # Get top 10 nearest misses to Earth (past and future)
 def nearest_misses():
     try:
         # Start default value where any added value will be new closest
-        closestDistanceArr = deque([math.inf] * topCount)      
-        # Initial closest NEO's array
-        closestNeoArr = deque([None] * topCount)
-        # Comparison array to prevent duplicate NEOs inserts
-        closestNeoEpoch = deque([None] * topCount)
+        closestDistanceArray = deque([math.inf] * topCount)      
+        closestNeosArray = deque([None] * topCount)
+        closestNeosEpoch = deque([None] * topCount)
         pageApi = 0                     # API page start at 0
         pageApiClosest = 0              # Page of closest NEO JSON Object
 
@@ -190,77 +160,72 @@ def nearest_misses():
                     approachAstroFloat = float(closeObjects["miss_distance"]["astronomical"])
 
                     # If current astronomical distance is larger than largest stored value, skip
-                    if (approachAstroFloat > max(closestDistanceArr)):
+                    if (approachAstroFloat > max(closestDistanceArray)):
                         continue
                     
-                    if (approachAstroFloat < closestDistanceArr[0] and orbiting_body == "Earth" ):
+                    if (approachAstroFloat < closestDistanceArray[0] and orbiting_body == "Earth" ):
                         closestNeo = loadJsonPerPage["near_earth_objects"][count]
                         closestNeo["close_approach_data"] = closeObjects
-                        closestDistanceArr.appendleft(approachAstroFloat)
-                        closestDistanceArr.pop()
-                        closestNeoArr.appendleft(closestNeo)
-                        closestNeoArr.pop()
-                        closestNeoEpoch.appendleft(epoch_date_close_approach)
-                        closestNeoEpoch.pop()
+                        closestDistanceArray.appendleft(approachAstroFloat)
+                        closestDistanceArray.pop()
+                        closestNeosArray.appendleft(closestNeo)
+                        closestNeosArray.pop()
+                        closestNeosEpoch.appendleft(epoch_date_close_approach)
+                        closestNeosEpoch.pop()
                         pageApiClosest = pageApi
 
                     # If distance is between values in sorted, current close distance array, 
                     # find where it goes and insert (JSON and distance arrays) and pop off rightmost values
-                    if (approachAstroFloat > closestDistanceArr[0] and approachAstroFloat < max(closestDistanceArr) and orbiting_body == "Earth"):
-                        for jdx in range(0, len(closestDistanceArr)-1):
-                            if (approachAstroFloat > closestDistanceArr[jdx] and (approachAstroFloat in closestDistanceArr) and (epoch_date_close_approach in closestNeoEpoch)):
+                    if (approachAstroFloat > closestDistanceArray[0] and approachAstroFloat < max(closestDistanceArray) and orbiting_body == "Earth"):
+                        for jdx in range(0, len(closestDistanceArray)-1):
+                            if (approachAstroFloat > closestDistanceArray[jdx] and (approachAstroFloat in closestDistanceArray) and (epoch_date_close_approach in closestNeosEpoch)):
                                 continue
-                            if (approachAstroFloat < closestDistanceArr[jdx] and (approachAstroFloat not in closestDistanceArr) and (epoch_date_close_approach not in closestNeoEpoch)):
-                                closestNeoArr.insert(jdx, closestNeo)
-                                closestNeoArr.pop()
-                                closestDistanceArr.insert(jdx,approachAstroFloat)
-                                closestDistanceArr.pop()
+                            if (approachAstroFloat < closestDistanceArray[jdx] and (approachAstroFloat not in closestDistanceArray) and (epoch_date_close_approach not in closestNeosEpoch)):
+                                closestNeosArray.insert(jdx, closestNeo)
+                                closestNeosArray.pop()
+                                closestDistanceArray.insert(jdx,approachAstroFloat)
+                                closestDistanceArray.pop()
+                                closestNeosEpoch.appendleft(epoch_date_close_approach)
+                                closestNeosEpoch.pop()
 
             #Output Test Block: page, closest distance, index of closest approach
             print('-------')
             print(f'Current page: {pageApi}')
-            print(f'Closest astronomical distance array: {closestDistanceArr}')
+            print(f'Closest astronomical distance array: {closestDistanceArray}')
             print(f'Closest NEO page: {pageApiClosest}')
             print('-------')
 
-        json.dump(list(closestNeoArr), fileTenClosestNeo, indent = 2)
-        pretty_print.pprint(closestNeoArr)
+        json.dump(list(closestNeosArray), fileTenClosestNeo, indent = 2)
+        pretty_print.pprint(closestNeosArray)
 
         fileTenClosestNeo.close
         print('**********')
+
     # Ensure no issues on API site
     except HTTPError as http_err:
         print(f'HTTP error occured: {http_err}')
     # General error handler
     except Exception as err:
-        print(f'Other error occured: {err}')
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        print(exc_type, fname, exc_tb.tb_lineno)
+        errorBlock(err)
 
 
 # Get closest 10 asteroids to Earth in given month
-# Current issues: 
-# -Algorithm does not reach level below "near_earth_objects" in nested JSON data
-# -Storing algorithm in ascending distance not accurate, propose sort() function (O(nlong(n) operation))
 def month_closest_approaches():
     try:
         # Writing to external JSON file for extraction
         fileClosestNeoMonth = open("closest_neo_per_month.json","w")
 
-        monthClass = monthInfo(yearToTest, monthToTest)
-
         # Start default value where any added value will be new closest
         closestDistanceArray = deque([math.inf] * topMonthCount) 
-        closestNeosArray = deque([None] * topMonthCount)  
+        closestNeosArray = deque([None] * topMonthCount)
+        closestNeosEpoch = deque([None] * topMonthCount)  
         totalNeosInMonth = 0 
+        monthClass = monthInfo(yearToTest, monthToTest)
         
         # Object Testing Block: Date Generation
         print('-------')
         print(f'Starting day: {monthClass.startDate}')
         print(f'Ending day: {monthClass.endDate}')
-        print(f'Initial Closest Distance Top 10 (Astronomical Dist): {closestDistanceArray}')
-        print(f'Initial CLosest NEO JSON Output: {closestNeosArray}')
         print('-------')
 
         # Determine number of weeks in month for iteration
@@ -275,12 +240,6 @@ def month_closest_approaches():
             if beginningDay > int(monthClass.endDay):
                 break
 
-            # Verify search band for API request
-            print('-------')
-            print(f'First day of week {int(idx) + 1}: {beginningDay}')
-            print(f'Last day of week{int(idx) + 1}: {endingDay}')
-            print('-------')
-
             # API Get request for each week to get API data
             params = {
                 'start_date': f'{yearToTest:04d}-{monthToTest:02d}-{beginningDay:02d}',
@@ -292,82 +251,78 @@ def month_closest_approaches():
             loadJson = json.loads(responseStr)  
 
             # Output for Element Count of NEO's in month
-            element_count = loadJson["element_count"]
-            totalNeosInMonth += int(element_count)
+            element_count = int(loadJson["element_count"])
+            totalNeosInMonth += element_count
 
-            # Console verification of Element counts
+            # Verify search band for API request
             print('-------')
+            print(f'First day of week {int(idx) + 1}: {beginningDay}')
+            print(f'Last day of week{int(idx) + 1}: {endingDay}')
             print(f'Elements in week {int(idx) + 1}: {element_count}')
             print(f'Total elements so far: {totalNeosInMonth}')
             print('-------')
+            
+            # Iterate through all NEO's by date
+            for dateNeo in loadJson["near_earth_objects"]:
+                dateCheck = dateNeo
 
-            # Iterate through all NEO's 
-            for count, neo in enumerate(loadJson["near_earth_objects"]):
-                # *** Can't seem to get past this level on the nested JSON: ***
-                # Appears to go into a list of NEO's of each date, but when trying
-                # to access this, it believes date needs to be an int and not string
-                print(neo[:])
-                close_approach_data = neo["close_approach_data"]
-                
-                # Iterate through each NEO's close approach data
-                for closeCount, closeObjects in enumerate(close_approach_data): 
-                    orbiting_body = closeObjects["orbiting_body"]
-                    print(f'Orbiting Body: {orbiting_body}')
-                    approachAstroFloat = float(closeObjects["miss_distance"]["astronomical"])
-                    
-                    # If distance is larger than largest value in current close distance array, skip
-                    if (approachAstroFloat > max(closestDistanceArray)):
-                        continue
-                    
-                    # If distance is smaller than smallest value in sorted, current close distance array, 
-                    # insert value from left of queue and pop off the rightmost (JSON and distance arrays)
-                    if (approachAstroFloat < closestDistanceArray[0] and orbiting_body == "Earth"):
-                        closeNeo = loadJson["near_earth_objects"][count]
-                        closeNeo["close_approach_data"] = closeObjects
-                        closestNeosArray.appendleft(closeNeo)
-                        closestNeosArray.pop()
-                        closestDistanceArray.appendleft(approachAstroFloat)
-                        closestDistanceArray.pop()
-                    
-                    ''''
-                    # *** Requires fix (repeating asteroid insert) ***
-                    # If distance is between values in sorted, current close distance array, 
-                    # find where it goes and insert (JSON and distance arrays) and pop off rightmost values
-                    if (approachAstroFloat > closestDistanceArray[0] and approachAstroFloat < max(closestDistanceArray) and orbiting_body == "Earth"):
-                        for jdx in range(0, len(closestDistanceArray)):
-                            if approachAstroFloat > closestDistanceArray[jdx]:
-                                continue
-                            if approachAstroFloat < closestDistanceArray[jdx]:
-                                closestNeosArray.insert(jdx, closeNeo)
-                                closestNeosArray.pop()
-                                closestDistanceArray.insert(jdx, approachAstroFloat)
-                                closestDistanceArray.pop()
-                    '''
+                for count, neoChoice in enumerate(loadJson["near_earth_objects"][f'{dateCheck}']):
+                    close_approach_data = neoChoice["close_approach_data"]
 
-            #Output Test Block: page, closest distance, index of closest approach
-            print('-------')
-            print(f'Array of closest Neo distances: {closestNeosArray}')
-            print('-------')
-                
+                    for data in close_approach_data:
+                        orbiting_body = str(data["orbiting_body"])
+                        epoch_date_close_approach = data["epoch_date_close_approach"]
+                        approachAstroFloat = float(data["miss_distance"]["astronomical"])
+
+                        # If distance is larger than largest value in current close distance array, skip
+                        if (approachAstroFloat > max(closestDistanceArray)):
+                            continue
+
+                        if (approachAstroFloat < closestDistanceArray[0] and orbiting_body == "Earth"):
+                            closeNeo = loadJson["near_earth_objects"][f'{dateCheck}'][count]
+                            closeNeo["close_approach_data"] = data
+                            closestNeosArray.appendleft(closeNeo)
+                            closestNeosArray.pop()
+                            closestDistanceArray.appendleft(approachAstroFloat)
+                            closestDistanceArray.pop()
+                            closestNeosEpoch.appendleft(epoch_date_close_approach)
+                            closestNeosEpoch.pop()
+            
+                        
+                        # If distance is between values in sorted, current close distance array, 
+                        # find where it goes and insert (JSON and distance arrays) and pop off rightmost values
+                        if (approachAstroFloat > closestDistanceArray[0] and approachAstroFloat < max(closestDistanceArray) and orbiting_body == "Earth"):
+                            for jdx in range(0, len(closestDistanceArray)-1):
+                                if (approachAstroFloat > closestDistanceArray[jdx] and (approachAstroFloat in closestDistanceArray) and (epoch_date_close_approach in closestNeosEpoch)):
+                                    continue
+                                if (approachAstroFloat < closestDistanceArray[jdx] and (approachAstroFloat not in closestDistanceArray) and (epoch_date_close_approach not in closestNeosEpoch)):
+                                    closestNeosArray.insert(jdx, closeNeo)
+                                    closestNeosArray.pop()
+                                    closestDistanceArray.insert(jdx,approachAstroFloat)
+                                    closestDistanceArray.pop()
+                                    closestNeosEpoch.appendleft(epoch_date_close_approach)
+                                    closestNeosEpoch.pop()
+    
+                #Output Test Block: page, closest distance, index of closest approach
+                print('-------')
+                print(f'{dateCheck}')
+                print(f'Array of closest Neo distances: {closestDistanceArray}')
+                print('-------')
+             
         # Output JSON to file and console, then close file
-        json.dump(closestNeosArray, fileClosestNeoMonth, indent = 2)
-        pretty_print.pprint(closeNeo)
+        json.dump(list(closestNeosArray), fileClosestNeoMonth, indent = 2)
         fileClosestNeoMonth.close
         print('**********')
-
+        
     # Ensure no issues on API site        
     except HTTPError as http_err:
         print(f'HTTP error occured: {http_err}')
     # General error handler
     except Exception as err:
-        print(f'Other error occured: {err}')
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        print(exc_type, fname, exc_tb.tb_lineno)
+        errorBlock(err)
 
 # Function Calls
 # Uncomment (if present) for accessing functions
-
 asteroid_closest_approach()
 nearest_misses()
 month_closest_approaches()
