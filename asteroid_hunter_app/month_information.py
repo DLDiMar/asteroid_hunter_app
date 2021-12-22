@@ -1,14 +1,14 @@
-class monthInfo:
+class MonthInfo:
     def __init__(self, year, month):
         self.year = f'{year:04d}'
         self.month = f'{month:02d}'
-        self.startDay = f'{1:02d}'
-        self.endDay = f'{self.daysInMonth(year, month):02d}'
+        self.start_day = f'{1:02d}'
+        self.end_day = f'{self.days_in_month(year, month):02d}'
 
-        self.startDate = f'{self.year}-{self.month}-{self.startDay}'
-        self.endDate = f'{self.year}-{self.month}-{self.endDay}'
+        self.start_date = f'{self.year}-{self.month}-{self.start_day}'
+        self.end_date = f'{self.year}-{self.month}-{self.end_day}'
     
-    def daysInMonth(self, year, month):
+    def days_in_month(self, year, month):
         if year % 4 == 0:
             monthSwitch = {
                 1: 31,
